@@ -1,0 +1,16 @@
+# .NET
+bin/
+obj/
+*.user
+.vs/
+
+# Önemli: Token ve şifreler asla GitHub'a gitmesin!
+**/appsettings.json
+**/appsettings.*.json
+
+# Node / Dashboard
+node_modules/
+dist/
+
+# Veritabanı dosyası
+*.db
