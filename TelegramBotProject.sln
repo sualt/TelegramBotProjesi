@@ -13,6 +13,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TelegramBot.Infrastructure"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TelegramBot.BotService", "src\TelegramBot.BotService\TelegramBot.BotService.csproj", "{DF256432-DB1C-4FD7-9530-3CBEA67C9B54}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TelegramBot.Dashboard", "src\TelegramBot.Dashboard\TelegramBot.Dashboard.csproj", "{D846071E-D742-440E-B7E8-A6DCB2608813}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -71,6 +73,18 @@ Global
 		{DF256432-DB1C-4FD7-9530-3CBEA67C9B54}.Release|x64.Build.0 = Release|Any CPU
 		{DF256432-DB1C-4FD7-9530-3CBEA67C9B54}.Release|x86.ActiveCfg = Release|Any CPU
 		{DF256432-DB1C-4FD7-9530-3CBEA67C9B54}.Release|x86.Build.0 = Release|Any CPU
+		{D846071E-D742-440E-B7E8-A6DCB2608813}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D846071E-D742-440E-B7E8-A6DCB2608813}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D846071E-D742-440E-B7E8-A6DCB2608813}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{D846071E-D742-440E-B7E8-A6DCB2608813}.Debug|x64.Build.0 = Debug|Any CPU
+		{D846071E-D742-440E-B7E8-A6DCB2608813}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{D846071E-D742-440E-B7E8-A6DCB2608813}.Debug|x86.Build.0 = Debug|Any CPU
+		{D846071E-D742-440E-B7E8-A6DCB2608813}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D846071E-D742-440E-B7E8-A6DCB2608813}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D846071E-D742-440E-B7E8-A6DCB2608813}.Release|x64.ActiveCfg = Release|Any CPU
+		{D846071E-D742-440E-B7E8-A6DCB2608813}.Release|x64.Build.0 = Release|Any CPU
+		{D846071E-D742-440E-B7E8-A6DCB2608813}.Release|x86.ActiveCfg = Release|Any CPU
+		{D846071E-D742-440E-B7E8-A6DCB2608813}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -80,5 +94,6 @@ Global
 		{C9C1C71E-3E0E-40B3-8143-ABEDC6C99A5D} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{7466DC5B-EAE2-4E65-8989-FBE171F7263F} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{DF256432-DB1C-4FD7-9530-3CBEA67C9B54} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
+		{D846071E-D742-440E-B7E8-A6DCB2608813} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 	EndGlobalSection
 EndGlobal

@@ -1,0 +1,71 @@
+@page "/activity"
+@rendermode InteractiveServer
+
+@using MongoDB.Driver
+@using TelegramBot.Core.Models
+@using TelegramBot.Infrastructure.MongoDB
+
+@inject MongoDbContext DbContext
+
+<PageTitle>Aktiviteler</PageTitle>
+
+<h1 class="page-title">📋 Sistem Aktiviteleri</h1>
+
+<input class="search-box"
+       placeholder="Telegram ID ara..."
+       @bind="searchText"
+       @bind:event="oninput" />
+
+@if (loading)
+{
+    <p>Yükleniyor...</p>
+}
+else
+{
+    <div class="panel">
+        <table class="data-table">
+            <thead>
+            <tr>
+                <th>Telegram ID</th>
+                <th>İşlem</th>
+                <th>Tarih</th>
+            </tr>
+            </thead>
+
+            <tbody>
+            @foreach (var log in FilteredLogs)
+            {
+                <tr>
+                    <td>@log.TelegramId</td>
+                    <td>@log.Action</td>
+                    <td>@log.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    bool loading = true;
+    string searchText = "";
+    List<InteractionLog> logs = new();
+
+    IEnumerable<InteractionLog> FilteredLogs =>
+        logs.Where(x =>
+            string.IsNullOrWhiteSpace(searchText) ||
+            x.TelegramId.Contains(searchText));
+
+   protected override async Task OnInitializedAsync()
+{
+    var filter = Builders<InteractionLog>.Filter.Empty;
+
+    logs = await DbContext.InteractionLogs
+        .Find(filter)
+        .SortByDescending(x => x.CreatedAt)
+        .Limit(1000)
+        .ToListAsync();
+
+    loading = false;
+}
+}

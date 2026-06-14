@@ -39,7 +39,7 @@ public class MessageHandler
 
         if (await _userService.IsBlockedAsync(telegramId))
         {
-            await _bot.SendTextMessageAsync(chatId,
+            await _bot.SendMessage(chatId,
                 "🚫 Hesabın engellenmiştir. @admin ile iletişime geçin.",
                 cancellationToken: ct);
             await _userService.LogInteractionAsync(telegramId.ToString(), "blocked_attempt");
@@ -59,9 +59,7 @@ public class MessageHandler
             }
             else
             {
-                await _bot.SendTextMessageAsync(chatId,
-                    "❌ Geçerli bir sayı gir (örn: 100)",
-                    cancellationToken: ct);
+                await _bot.SendMessage(chatId, "❌ Geçerli bir sayı gir (örn: 100)", cancellationToken: ct);
             }
             return;
         }
@@ -100,10 +98,11 @@ public class MessageHandler
                    "💱 *Döviz Çevirici Bot*'a hoş geldin!\n\n" +
                    "📋 Neler yapabilirsin:\n" +
                    "• Anlık döviz kuru sorgulama\n" +
-                   "• Günlük 10 sorgu hakkı\n\n" +
+                   "• Günlük 10 sorgu hakkı\n" +
+                   "• 5 dk içinde aynı kur → hak yenmez!\n\n" +
                    "/menu → Ana menüyü aç";
 
-        await _bot.SendTextMessageAsync(chatId, text,
+        await _bot.SendMessage(chatId, text,
             parseMode: ParseMode.Markdown,
             replyMarkup: GetMainMenuKeyboard(),
             cancellationToken: ct);
@@ -128,10 +127,10 @@ public class MessageHandler
                    "5. Sonucu al ✅\n\n" +
                    "*Limitler:*\n" +
                    "• Günlük 10 sorgu hakkı\n" +
-                   "• Kurlar 5 dakikada bir önbelleklenir\n" +
+                   "• Aynı kur 5 dk içinde sorgulanırsa hak yenmez 📦\n" +
                    "• Gece yarısı haklar sıfırlanır 🌙";
 
-        await _bot.SendTextMessageAsync(chatId, text,
+        await _bot.SendMessage(chatId, text,
             parseMode: ParseMode.Markdown,
             cancellationToken: ct);
     }
@@ -139,7 +138,7 @@ public class MessageHandler
     private async Task HandleMenuAsync(long chatId, long telegramId, CancellationToken ct)
     {
         await _userService.LogInteractionAsync(telegramId.ToString(), "menu_open");
-        await _bot.SendTextMessageAsync(chatId, "📋 Ana Menü:",
+        await _bot.SendMessage(chatId, "📋 Ana Menü:",
             replyMarkup: GetMainMenuKeyboard(),
             cancellationToken: ct);
     }
@@ -149,7 +148,7 @@ public class MessageHandler
         await _userService.LogInteractionAsync(telegramId.ToString(), "convert_start");
         _sessions.SetSession(telegramId, new UserSession { Step = "from" });
 
-        await _bot.SendTextMessageAsync(chatId, "💱 Kaynak para birimini seç:",
+        await _bot.SendMessage(chatId, "💱 Kaynak para birimini seç:",
             replyMarkup: GetCurrencyInlineKeyboard("from"),
             cancellationToken: ct);
     }
@@ -161,26 +160,51 @@ public class MessageHandler
         var id = telegramId.ToString();
         var today = DateTime.UtcNow.ToString("yyyy-MM-dd");
 
-        var todayUsage = await _userService.GetTodayUsageAsync(id, today);
-        var totalQueries = await _userService.GetTotalQueriesAsync(id);
+        var todayUsage    = await _userService.GetTodayUsageAsync(id, today);
+        var totalQueries  = await _userService.GetTotalQueriesAsync(id);
         var recentQueries = await _userService.GetRecentQueriesAsync(id, 5);
+        var favPairs      = await _userService.GetFavoritePairsAsync(id, 3);
+        var weeklyUsage   = await _userService.GetWeeklyUsageAsync(id);
 
         var remaining = 10 - todayUsage;
-        var bars = string.Concat(Enumerable.Repeat("🟢", Math.Min(remaining, 5)));
 
-        var text = $"📊 *Dashboard'um*\n\n" +
-                   $"🎯 Bugün: {todayUsage}/10 kullandım\n" +
-                   $"✅ Kalan: {remaining} {bars}\n\n" +
-                   $"📈 Toplam: {totalQueries} sorgu\n\n" +
-                   "🕐 *Son Sorgular:*\n";
+        var hakGostergesi = string.Concat(Enumerable.Repeat("🟢", remaining)) +
+                            string.Concat(Enumerable.Repeat("⚪", 10 - remaining));
 
-        if (!recentQueries.Any())
-            text += "Henüz sorgu yapılmadı.";
-        else
-            foreach (var q in recentQueries)
-                text += $"\n• {q.FromCurrency}→{q.ToCurrency}: {q.Rate:F4}";
+        var haftalikText = "";
+        foreach (var (tarih, sayi) in weeklyUsage)
+        {
+            var gun = DateTime.Parse(tarih).ToString("ddd",
+                new System.Globalization.CultureInfo("tr-TR"));
+            var bar = string.Concat(Enumerable.Repeat("▓", sayi)) +
+                      string.Concat(Enumerable.Repeat("░", 10 - sayi));
+            haftalikText += $"\n`{gun}` {bar} {sayi}";
+        }
 
-        await _bot.SendTextMessageAsync(chatId, text,
+        var favText = favPairs.Any()
+            ? string.Join("\n", favPairs.Select((p, i) => $"{i + 1}. {p.Pair} ({p.Count} kez)"))
+            : "Henüz yok";
+
+        var sonSorgular = recentQueries.Any()
+            ? string.Join("\n", recentQueries.Select(q =>
+                $"• {q.FromCurrency}→{q.ToCurrency}: `{q.Rate:F4}` ({q.QueriedAt:HH:mm})"))
+            : "Henüz sorgu yapılmadı";
+
+        var text = $"📊 *Kişisel Dashboard*\n" +
+                   $"━━━━━━━━━━━━━━━━\n\n" +
+                   $"🎯 *Bugünkü Hak*\n" +
+                   $"{hakGostergesi}\n" +
+                   $"Kullanılan: {todayUsage}/10 — Kalan: {remaining}\n\n" +
+                   $"📈 *Genel İstatistik*\n" +
+                   $"• Toplam sorgu: {totalQueries}\n\n" +
+                   $"⭐ *Favori Paritelerim*\n" +
+                   $"{favText}\n\n" +
+                   $"📅 *Son 7 Gün*\n" +
+                   $"{haftalikText}\n\n" +
+                   $"🕐 *Son Sorgular*\n" +
+                   $"{sonSorgular}";
+
+        await _bot.SendMessage(chatId, text,
             parseMode: ParseMode.Markdown,
             cancellationToken: ct);
     }
@@ -188,7 +212,7 @@ public class MessageHandler
     private async Task HandlePopularRatesAsync(long chatId, long telegramId, CancellationToken ct)
     {
         await _userService.LogInteractionAsync(telegramId.ToString(), "popular_rates");
-        await _bot.SendTextMessageAsync(chatId, "⏳ Kurlar yükleniyor...", cancellationToken: ct);
+        await _bot.SendMessage(chatId, "⏳ Kurlar yükleniyor...", cancellationToken: ct);
 
         var pairs = new[] { ("USD", "TRY"), ("EUR", "TRY"), ("GBP", "TRY"), ("USD", "EUR") };
         var text = "📈 *Popüler Kurlar*\n\n";
@@ -204,7 +228,7 @@ public class MessageHandler
         }
 
         text += "\n_5 dakikada bir güncellenir_";
-        await _bot.SendTextMessageAsync(chatId, text,
+        await _bot.SendMessage(chatId, text,
             parseMode: ParseMode.Markdown,
             cancellationToken: ct);
     }
@@ -212,32 +236,34 @@ public class MessageHandler
     public async Task ProcessConversionAsync(long chatId, long telegramId,
         string from, string to, decimal amount, CancellationToken ct)
     {
-        var limitResult = await _userService.CheckAndUseLimitAsync(telegramId);
-
-        if (!limitResult.Allowed)
-        {
-            await _bot.SendTextMessageAsync(chatId,
-                "⛔ Günlük 10 sorgu hakkını tükettiniz!\n🌙 Gece yarısı sıfırlanacak.",
-                cancellationToken: ct);
-            return;
-        }
-
-        await _bot.SendTextMessageAsync(chatId, "⏳ Kur alınıyor...", cancellationToken: ct);
+        await _bot.SendMessage(chatId, "⏳ Kur alınıyor...", cancellationToken: ct);
 
         try
         {
             var (rate, fromCache) = await _exchangeService.GetRateAsync(from, to);
-            var result = amount * rate;
+            var limitResult = await _userService.CheckAndUseLimitAsync(telegramId, fromCache);
 
+            if (!limitResult.Allowed)
+            {
+                await _bot.SendMessage(chatId,
+                    "⛔ Günlük 10 sorgu hakkını tükettiniz!\n🌙 Gece yarısı sıfırlanacak.",
+                    cancellationToken: ct);
+                return;
+            }
+
+            var result = amount * rate;
             await _userService.SaveQueryAsync(telegramId.ToString(), from, to, amount, rate, result, fromCache);
+
+            var hakBilgisi = fromCache
+                ? "📦 Önbellekten geldi — hak kullanılmadı!"
+                : $"🎯 Kalan hak: {limitResult.Remaining}/10";
 
             var text = $"💱 *Döviz Sonucu*\n\n" +
                        $"{amount} *{from}* = *{result:F2} {to}*\n\n" +
                        $"📊 Kur: 1 {from} = {rate:F4} {to}\n" +
-                       $"{(fromCache ? "📦 Önbellekten" : "🌐 Canlı veri")}\n\n" +
-                       $"🎯 Kalan hak: {limitResult.Remaining}/10";
+                       $"{hakBilgisi}";
 
-            await _bot.SendTextMessageAsync(chatId, text,
+            await _bot.SendMessage(chatId, text,
                 parseMode: ParseMode.Markdown,
                 replyMarkup: new InlineKeyboardMarkup(new[]
                 {
@@ -251,17 +277,19 @@ public class MessageHandler
         }
         catch (Exception ex)
         {
-            await _bot.SendTextMessageAsync(chatId, $"❌ Hata: {ex.Message}", cancellationToken: ct);
+            await _bot.SendMessage(chatId, $"❌ Hata: {ex.Message}", cancellationToken: ct);
         }
     }
 
-    public static ReplyKeyboardMarkup GetMainMenuKeyboard() =>
-        new(new[]
+    public static ReplyKeyboardMarkup GetMainMenuKeyboard()
+    {
+        var buttons = new List<List<KeyboardButton>>
         {
-            new KeyboardButton[] { "💱 Döviz Çevir", "📊 Dashboard'um" },
-            new KeyboardButton[] { "📈 Popüler Kurlar", "❓ Yardım" }
-        })
-        { ResizeKeyboard = true, IsPersistent = true };
+            new() { new KeyboardButton("💱 Döviz Çevir"), new KeyboardButton("📊 Dashboard'um") },
+            new() { new KeyboardButton("📈 Popüler Kurlar"), new KeyboardButton("❓ Yardım") }
+        };
+        return new ReplyKeyboardMarkup(buttons) { ResizeKeyboard = true };
+    }
 
     public static InlineKeyboardMarkup GetCurrencyInlineKeyboard(string type, string? exclude = null)
     {

@@ -56,8 +56,14 @@ public class UserService
         return await _context.Users.Find(filter).AnyAsync();
     }
 
-    public async Task<(bool Allowed, int Remaining, int Used)> CheckAndUseLimitAsync(long telegramId)
+    // ✅ DEĞİŞTİ: fromCache parametresi eklendi
+    public async Task<(bool Allowed, int Remaining, int Used)> CheckAndUseLimitAsync(
+        long telegramId, bool fromCache = false)
     {
+        // Cache'den geldiyse hak yeme
+        if (fromCache)
+            return (true, -1, -1);
+
         var today = DateTime.UtcNow.ToString("yyyy-MM-dd");
         var id = telegramId.ToString();
         const int limit = 10;
@@ -106,10 +112,16 @@ public class UserService
         });
     }
 
+    // ✅ DEĞİŞTİ: artık gerçekten log kaydediyor
     public async Task LogInteractionAsync(string telegramId, string action,
         Dictionary<string, object>? details = null)
     {
-        return;
+        await _context.InteractionLogs.InsertOneAsync(new InteractionLog
+        {
+            TelegramId = telegramId,
+            Action = action,
+            Details = details ?? new Dictionary<string, object>()
+        });
     }
 
     public async Task<List<User>> GetAllUsersAsync(int page = 1, int limit = 20, bool? blocked = null)
@@ -157,5 +169,39 @@ public class UserService
             .SortByDescending(q => q.QueriedAt)
             .Limit(count)
             .ToListAsync();
+    }
+
+    // ✅ YENİ: En çok kullanılan pariteler
+    public async Task<List<(string Pair, long Count)>> GetFavoritePairsAsync(string telegramId, int count = 3)
+    {
+        var filter = Builders<QueryRecord>.Filter.Eq(q => q.TelegramId, telegramId);
+        var queries = await _context.Queries.Find(filter).ToListAsync();
+
+        return queries
+            .GroupBy(q => $"{q.FromCurrency}→{q.ToCurrency}")
+            .Select(g => (Pair: g.Key, Count: (long)g.Count()))
+            .OrderByDescending(x => x.Count)
+            .Take(count)
+            .ToList();
+    }
+
+    // ✅ YENİ: Son 7 günlük kullanım (dashboard grafiği için)
+    public async Task<Dictionary<string, int>> GetWeeklyUsageAsync(string telegramId)
+    {
+        var result = new Dictionary<string, int>();
+        var today = DateTime.UtcNow.Date;
+
+        for (int i = 6; i >= 0; i--)
+        {
+            var date = today.AddDays(-i).ToString("yyyy-MM-dd");
+            var filter = Builders<DailyUsage>.Filter.And(
+                Builders<DailyUsage>.Filter.Eq(d => d.TelegramId, telegramId),
+                Builders<DailyUsage>.Filter.Eq(d => d.UsageDate, date)
+            );
+            var usage = await _context.DailyUsages.Find(filter).FirstOrDefaultAsync();
+            result[date] = usage?.Count ?? 0;
+        }
+
+        return result;
     }
 }

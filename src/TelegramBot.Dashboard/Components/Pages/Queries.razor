@@ -1,0 +1,78 @@
+@page "/queries"
+@rendermode InteractiveServer
+
+@using MongoDB.Driver
+@using TelegramBot.Core.Models
+@using TelegramBot.Infrastructure.MongoDB
+
+@inject MongoDbContext DbContext
+<PageTitle>Sorgular</PageTitle>
+
+<h1 class="page-title">💱 Döviz Sorguları</h1>
+
+<input class="search-box"
+       placeholder="Telegram ID ara..."
+       @bind="searchText"
+       @bind:event="oninput" />
+
+@if (loading)
+{
+    <p>Yükleniyor...</p>
+}
+else
+{
+    <div class="panel">
+        <table class="data-table">
+            <thead>
+            <tr>
+                <th>Telegram ID</th>
+                <th>Parite</th>
+                <th>Tutar</th>
+                <th>Kur</th>
+                <th>Sonuç</th>
+                <th>Cache</th>
+                <th>Tarih</th>
+            </tr>
+            </thead>
+
+            <tbody>
+            @foreach (var q in FilteredQueries)
+            {
+                <tr>
+                    <td>@q.TelegramId</td>
+                    <td>@q.FromCurrency/@q.ToCurrency</td>
+                    <td>@q.Amount</td>
+                    <td>@q.Rate</td>
+                    <td>@q.Result</td>
+                    <td>@(q.FromCache ? "⚡" : "🌐")</td>
+                    <td>@q.QueriedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    bool loading = true;
+    string searchText = "";
+    List<QueryRecord> queries = new();
+
+    IEnumerable<QueryRecord> FilteredQueries =>
+        queries.Where(x =>
+            string.IsNullOrWhiteSpace(searchText) ||
+            x.TelegramId.Contains(searchText));
+
+    protected override async Task OnInitializedAsync()
+{
+    var filter = Builders<QueryRecord>.Filter.Empty;
+
+    queries = await DbContext.Queries
+        .Find(filter)
+        .SortByDescending(x => x.QueriedAt)
+        .Limit(1000)
+        .ToListAsync();
+
+    loading = false;
+}
+}

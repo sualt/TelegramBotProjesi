@@ -31,14 +31,14 @@ public class BotHostedService : BackgroundService
     {
         _logger.LogInformation("🤖 Telegram botu başlatılıyor...");
 
-        await _botClient.SetMyCommandsAsync(new[]
-        {
-            new BotCommand { Command = "start",     Description = "Botu başlat" },
-            new BotCommand { Command = "menu",      Description = "Ana menü" },
-            new BotCommand { Command = "convert",   Description = "Döviz çevir" },
-            new BotCommand { Command = "dashboard", Description = "İstatistiklerim" },
-            new BotCommand { Command = "help",      Description = "Yardım" }
-        }, cancellationToken: stoppingToken);
+        await _botClient.SetMyCommands(new[]
+{
+    new BotCommand { Command = "start",     Description = "Botu başlat" },
+    new BotCommand { Command = "menu",      Description = "Ana menü" },
+    new BotCommand { Command = "convert",   Description = "Döviz çevir" },
+    new BotCommand { Command = "dashboard", Description = "İstatistiklerim" },
+    new BotCommand { Command = "help",      Description = "Yardım" }
+}, cancellationToken: stoppingToken);
 
         var cts = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
 

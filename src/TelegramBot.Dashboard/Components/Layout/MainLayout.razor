@@ -1,0 +1,82 @@
+﻿@inherits LayoutComponentBase
+
+<div class="layout">
+    <nav class="sidebar">
+        <div class="sidebar-header">
+            <h2>🤖 Bot Admin</h2>
+        </div>
+        <ul class="nav-links">
+            <li><a href="/">📊 Dashboard</a></li>
+            <li><a href="/users">👥 Kullanıcılar</a></li>
+            <li><a href="/activity">📋 Aktiviteler</a></li>
+            <li><a href="/queries">💱 Sorgular</a></li>
+        </ul>
+    </nav>
+
+    <main class="main-content">
+        <div class="topbar">
+            <span>Telegram Bot Yönetim Paneli</span>
+            <span class="time">@DateTime.Now.ToString("dd.MM.yyyy HH:mm")</span>
+        </div>
+        <div class="content">
+            @Body
+        </div>
+    </main>
+</div>
+
+<style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Segoe UI', sans-serif; background: #0f0f1a; color: #e0e0e0; }
+
+    .layout { display: flex; min-height: 100vh; }
+
+    .sidebar {
+        width: 240px;
+        background: #1a1a2e;
+        border-right: 1px solid #2d2d44;
+        padding: 0;
+        position: fixed;
+        height: 100vh;
+    }
+
+    .sidebar-header {
+        padding: 24px 20px;
+        border-bottom: 1px solid #2d2d44;
+        background: #16213e;
+    }
+
+    .sidebar-header h2 { color: #7c6af7; font-size: 1.2rem; }
+
+    .nav-links { list-style: none; padding: 16px 0; }
+
+    .nav-links li a {
+        display: block;
+        padding: 12px 20px;
+        color: #a0a0b8;
+        text-decoration: none;
+        font-size: 0.95rem;
+        transition: all 0.2s;
+        border-left: 3px solid transparent;
+    }
+
+    .nav-links li a:hover {
+        background: #2d2d44;
+        color: #fff;
+        border-left-color: #7c6af7;
+    }
+
+    .main-content { margin-left: 240px; flex: 1; }
+
+    .topbar {
+        background: #1a1a2e;
+        padding: 16px 24px;
+        border-bottom: 1px solid #2d2d44;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 0.9rem;
+        color: #a0a0b8;
+    }
+
+    .content { padding: 24px; }
+</style>

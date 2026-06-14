@@ -27,7 +27,7 @@ public class CallbackHandler
 
     public async Task HandleAsync(CallbackQuery query, CancellationToken ct)
     {
-        await _bot.AnswerCallbackQueryAsync(query.Id, cancellationToken: ct);
+        await _bot.AnswerCallbackQuery(query.Id, cancellationToken: ct);
 
         var telegramId = query.From.Id;
         var data = query.Data ?? string.Empty;
@@ -42,7 +42,7 @@ public class CallbackHandler
             var currency = data["from_".Length..];
             _sessions.SetSession(telegramId, new UserSession { Step = "to", From = currency });
 
-            await _bot.EditMessageTextAsync(chatId, messageId,
+            await _bot.EditMessageText(chatId, messageId,
                 $"✅ Kaynak: *{currency}*\n\nHedef para birimini seç:",
                 parseMode: ParseMode.Markdown,
                 replyMarkup: MessageHandler.GetCurrencyInlineKeyboard("to", currency),
@@ -57,7 +57,7 @@ public class CallbackHandler
 
             if (session == null)
             {
-                await _bot.SendTextMessageAsync(chatId,
+                await _bot.SendMessage(chatId,
                     "❌ Oturum doldu. /convert ile yeniden başla.",
                     cancellationToken: ct);
                 return;
@@ -65,7 +65,7 @@ public class CallbackHandler
 
             _sessions.SetSession(telegramId, session with { Step = "amount", To = currency });
 
-            await _bot.EditMessageTextAsync(chatId, messageId,
+            await _bot.EditMessageText(chatId, messageId,
                 $"✅ {session.From} → {currency}\n\nMiktarı yaz (sadece sayı):",
                 parseMode: ParseMode.Markdown,
                 cancellationToken: ct);

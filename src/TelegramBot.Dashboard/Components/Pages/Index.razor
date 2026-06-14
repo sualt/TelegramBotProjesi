@@ -1,0 +1,199 @@
+@using MongoDB.Driver
+@page "/"
+@rendermode InteractiveServer
+@using TelegramBot.Core.Models
+@using TelegramBot.Infrastructure.Services
+@using TelegramBot.Infrastructure.MongoDB
+@inject UserService UserService
+@inject MongoDbContext DbContext
+
+<PageTitle>Dashboard</PageTitle>
+
+<h1 class="page-title">📊 Genel Bakış</h1>
+
+@if (loading)
+{
+    <div class="loading">⏳ Yükleniyor...</div>
+}
+else
+{
+    <div class="stats-grid">
+        <div class="stat-card blue">
+            <div class="stat-icon">👥</div>
+            <div class="stat-info">
+                <div class="stat-value">@totalUsers</div>
+                <div class="stat-label">Toplam Kullanıcı</div>
+            </div>
+        </div>
+        <div class="stat-card red">
+            <div class="stat-icon">🚫</div>
+            <div class="stat-info">
+                <div class="stat-value">@blockedUsers</div>
+                <div class="stat-label">Engelli Kullanıcı</div>
+            </div>
+        </div>
+        <div class="stat-card green">
+            <div class="stat-icon">💱</div>
+            <div class="stat-info">
+                <div class="stat-value">@totalQueries</div>
+                <div class="stat-label">Toplam Sorgu</div>
+            </div>
+        </div>
+        <div class="stat-card purple">
+            <div class="stat-icon">📅</div>
+            <div class="stat-info">
+                <div class="stat-value">@todayQueries</div>
+                <div class="stat-label">Bugünkü Sorgu</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="panels">
+        <div class="panel">
+            <h3>⭐ Popüler Pariteler</h3>
+            <table class="data-table">
+                <thead>
+                    <tr><th>Parite</th><th>Sorgu</th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var p in popularPairs)
+                    {
+                        <tr>
+                            <td>@p.Pair</td>
+                            <td><span class="badge">@p.Count</span></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        <div class="panel">
+            <h3>🕐 Son Aktiviteler</h3>
+            <div class="activity-list">
+                @foreach (var log in recentLogs)
+                {
+                    <div class="activity-item">
+                        <span class="activity-action">@GetActionEmoji(log.Action) @log.Action</span>
+                        <span class="activity-id">@log.TelegramId</span>
+                        <span class="activity-time">@log.CreatedAt.ToString("HH:mm")</span>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    bool loading = true;
+    long totalUsers, blockedUsers, totalQueries, todayQueries;
+    List<(string Pair, int Count)> popularPairs = new();
+    List<InteractionLog> recentLogs = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var today = DateTime.UtcNow.Date;
+
+        var userFilter = MongoDB.Driver.Builders<User>.Filter.Empty;
+        var blockedFilter = MongoDB.Driver.Builders<User>.Filter.Eq(u => u.IsBlocked, true);
+        var queryFilter = MongoDB.Driver.Builders<QueryRecord>.Filter.Empty;
+        var todayFilter = MongoDB.Driver.Builders<QueryRecord>.Filter.Gte(q => q.QueriedAt, today);
+        var logFilter = MongoDB.Driver.Builders<InteractionLog>.Filter.Empty;
+
+        totalUsers = await DbContext.Users.CountDocumentsAsync(userFilter);
+        blockedUsers = await DbContext.Users.CountDocumentsAsync(blockedFilter);
+        totalQueries = await DbContext.Queries.CountDocumentsAsync(queryFilter);
+        todayQueries = await DbContext.Queries.CountDocumentsAsync(todayFilter);
+
+        var allQueries = await DbContext.Queries
+            .Find(queryFilter)
+            .ToListAsync();
+
+        popularPairs = allQueries
+            .GroupBy(q => $"{q.FromCurrency}/{q.ToCurrency}")
+            .Select(g => (Pair: g.Key, Count: g.Count()))
+            .OrderByDescending(x => x.Count)
+            .Take(5)
+            .ToList();
+
+        recentLogs = await DbContext.InteractionLogs
+            .Find(logFilter)
+            .ToListAsync();
+
+        recentLogs = recentLogs
+            .OrderByDescending(l => l.CreatedAt)
+            .Take(10)
+            .ToList();
+
+        loading = false;
+    }
+
+    string GetActionEmoji(string action) => action switch
+    {
+        "start" => "🚀",
+        "help" => "❓",
+        "convert_start" => "💱",
+        "currency_query" => "✅",
+        "blocked_attempt" => "🚫",
+        "dashboard_view" => "📊",
+        _ => "•"
+    };
+}
+
+<style>
+    .page-title { color: #7c6af7; margin-bottom: 24px; font-size: 1.5rem; }
+    .loading { color: #a0a0b8; padding: 40px; text-align: center; }
+
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 16px;
+        margin-bottom: 24px;
+    }
+
+    .stat-card {
+        background: #1a1a2e;
+        border-radius: 12px;
+        padding: 20px;
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        border: 1px solid #2d2d44;
+    }
+
+    .stat-card.blue  { border-top: 3px solid #4f9cf9; }
+    .stat-card.red   { border-top: 3px solid #f95f5f; }
+    .stat-card.green { border-top: 3px solid #4fcf8f; }
+    .stat-card.purple{ border-top: 3px solid #7c6af7; }
+
+    .stat-icon { font-size: 2rem; }
+    .stat-value { font-size: 1.8rem; font-weight: 700; color: #fff; }
+    .stat-label { font-size: 0.8rem; color: #a0a0b8; margin-top: 4px; }
+
+    .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+
+    .panel {
+        background: #1a1a2e;
+        border-radius: 12px;
+        padding: 20px;
+        border: 1px solid #2d2d44;
+    }
+
+    .panel h3 { color: #a0a0b8; font-size: 0.95rem; margin-bottom: 16px; }
+
+    .data-table { width: 100%; border-collapse: collapse; }
+    .data-table th { color: #7c6af7; font-size: 0.8rem; padding: 8px 0; text-align: left; border-bottom: 1px solid #2d2d44; }
+    .data-table td { padding: 10px 0; border-bottom: 1px solid #1f1f35; font-size: 0.9rem; }
+
+    .badge { background: #2d2d44; color: #7c6af7; padding: 2px 8px; border-radius: 12px; font-size: 0.8rem; }
+
+    .activity-item {
+        display: flex;
+        justify-content: space-between;
+        padding: 8px 0;
+        border-bottom: 1px solid #1f1f35;
+        font-size: 0.85rem;
+    }
+    .activity-action { color: #e0e0e0; }
+    .activity-id { color: #7c6af7; }
+    .activity-time { color: #606080; }
+</style>
