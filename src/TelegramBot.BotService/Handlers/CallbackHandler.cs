@@ -37,6 +37,13 @@ public class CallbackHandler
         await _userService.LogInteractionAsync(telegramId.ToString(), "button_click",
             new Dictionary<string, object> { { "button", data } });
 
+        // ✅ Menü inline buton callback'leri
+        if (data.StartsWith("menu_"))
+        {
+            await HandleMenuCallbackAsync(chatId, telegramId, messageId, data, ct);
+            return;
+        }
+
         if (data.StartsWith("from_"))
         {
             var currency = data["from_".Length..];
@@ -77,6 +84,42 @@ public class CallbackHandler
             var parts = data.Split('_');
             if (parts.Length == 3)
                 await _messageHandler.ProcessConversionAsync(chatId, telegramId, parts[1], parts[2], 1, ct);
+        }
+    }
+
+    private async Task HandleMenuCallbackAsync(long chatId, long telegramId, int messageId, string data, CancellationToken ct)
+    {
+        switch (data)
+        {
+            case "menu_convert":
+                // Inline menü mesajını sil, convert başlat
+                await _bot.DeleteMessage(chatId, messageId, cancellationToken: ct);
+                _sessions.SetSession(telegramId, new UserSession { Step = "from" });
+                await _bot.SendMessage(chatId,
+                    "💱 Kaynak para birimini seç:",
+                    replyMarkup: MessageHandler.GetCurrencyInlineKeyboard("from"),
+                    cancellationToken: ct);
+                break;
+
+            case "menu_dashboard":
+                await _bot.DeleteMessage(chatId, messageId, cancellationToken: ct);
+                await _messageHandler.HandleDashboardAsync(chatId, telegramId, ct);
+                break;
+
+            case "menu_popular":
+                await _bot.DeleteMessage(chatId, messageId, cancellationToken: ct);
+                await _messageHandler.HandlePopularRatesAsync(chatId, telegramId, ct);
+                break;
+
+            case "menu_help":
+                await _bot.DeleteMessage(chatId, messageId, cancellationToken: ct);
+                await _messageHandler.HandleHelpAsync(chatId, telegramId, ct);
+                break;
+
+            case "menu_plan":
+                await _bot.DeleteMessage(chatId, messageId, cancellationToken: ct);
+                await _messageHandler.HandlePlanInfoAsync(chatId, telegramId, ct);
+                break;
         }
     }
 }
