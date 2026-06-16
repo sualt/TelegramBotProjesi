@@ -4,6 +4,8 @@ using MongoDB.Bson.Serialization.Attributes;
 
 namespace TelegramBot.Core.Models;
 
+public enum SubscriptionPlan { Free, Pro, Admin }
+
 public class User
 {
     [BsonId]
@@ -17,4 +19,11 @@ public class User
     public int DailyLimit { get; set; } = 10;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime LastActive { get; set; } = DateTime.UtcNow;
+
+    // --- YENİ: Üyelik ---
+    public SubscriptionPlan Plan { get; set; } = SubscriptionPlan.Free;
+    public DateTime? PlanExpiresAt { get; set; }
+    public bool IsPlanActive => Plan == SubscriptionPlan.Free ||
+                                Plan == SubscriptionPlan.Admin ||
+                                (PlanExpiresAt.HasValue && PlanExpiresAt > DateTime.UtcNow);
 }

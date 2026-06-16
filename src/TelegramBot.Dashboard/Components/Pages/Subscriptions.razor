@@ -1,0 +1,170 @@
+@page "/subscriptions"
+@rendermode InteractiveServer
+@using TelegramBot.Core.Models
+@using TelegramBot.Infrastructure.Services
+@using TelegramBot.Infrastructure.MongoDB
+@using MongoDB.Driver
+@inject UserService UserService
+@inject MongoDbContext DbContext
+
+<PageTitle>Üyelik Yönetimi</PageTitle>
+<h1 class="page-title">💳 Üyelik Yönetimi</h1>
+
+@if (loading)
+{
+    <div class="loading">⏳ Yükleniyor...</div>
+}
+else
+{
+    <div class="filter-bar">
+        <button class="filter-btn @(filter == "all"  ? "active" : "")" @onclick='() => SetFilter("all")'>Tümü (@users.Count)</button>
+        <button class="filter-btn @(filter == "free" ? "active" : "")" @onclick='() => SetFilter("free")'>🆓 Free</button>
+        <button class="filter-btn @(filter == "pro"  ? "active" : "")" @onclick='() => SetFilter("pro")'>⭐ Pro</button>
+        <button class="filter-btn @(filter == "admin"? "active" : "")" @onclick='() => SetFilter("admin")'>🛡 Admin</button>
+    </div>
+
+    <div class="panel">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Kullanıcı</th>
+                    <th>Telegram ID</th>
+                    <th>Plan</th>
+                    <th>Bitiş</th>
+                    <th>İşlem</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var u in FilteredUsers)
+                {
+                    <tr>
+                        <td>@(u.FirstName ?? "-") @(u.Username != null ? $"(@{u.Username})" : "")</td>
+                        <td><span class="tid">@u.TelegramId</span></td>
+                        <td><span class="plan-badge @u.Plan.ToString().ToLower()">@GetPlanLabel(u.Plan)</span></td>
+                        <td class="expiry">
+                            @(u.PlanExpiresAt.HasValue
+                                ? u.PlanExpiresAt.Value.ToString("dd.MM.yyyy")
+                                : u.Plan == SubscriptionPlan.Free ? "—" : "Süresiz")
+                        </td>
+                        <td>
+                            <select class="plan-select" @onchange="e => ChangePlan(u.TelegramId, e.Value?.ToString())">
+                                <option value="Free"  selected="@(u.Plan == SubscriptionPlan.Free)">🆓 Free</option>
+                                <option value="Pro"   selected="@(u.Plan == SubscriptionPlan.Pro)">⭐ Pro (30 gün)</option>
+                                <option value="Admin" selected="@(u.Plan == SubscriptionPlan.Admin)">🛡 Admin</option>
+                            </select>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    @if (!string.IsNullOrEmpty(message))
+    {
+        <div class="toast @(isError ? "error" : "success")">@message</div>
+    }
+}
+
+@code {
+    bool loading = true;
+    string filter = "all";
+    string message = "";
+    bool isError = false;
+    List<User> users = new();
+
+    IEnumerable<User> FilteredUsers => filter switch
+    {
+        "free"  => users.Where(u => u.Plan == SubscriptionPlan.Free),
+        "pro"   => users.Where(u => u.Plan == SubscriptionPlan.Pro),
+        "admin" => users.Where(u => u.Plan == SubscriptionPlan.Admin),
+        _       => users
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadUsers();
+        loading = false;
+    }
+
+    async Task LoadUsers()
+    {
+        users = await DbContext.Users
+            .Find(Builders<User>.Filter.Empty)
+            .SortByDescending(u => u.LastActive)
+            .ToListAsync();
+    }
+
+    void SetFilter(string f) => filter = f;
+
+    async Task ChangePlan(string telegramId, string? planStr)
+    {
+        if (!Enum.TryParse<SubscriptionPlan>(planStr, out var plan)) return;
+
+        var ok = await UserService.SetPlanAsync(telegramId, plan);
+        if (ok)
+        {
+            message = $"✅ {telegramId} → {plan} planına alındı";
+            isError = false;
+            await LoadUsers();
+        }
+        else
+        {
+            message = "❌ Güncelleme başarısız";
+            isError = true;
+        }
+        StateHasChanged();
+        await Task.Delay(3000);
+        message = "";
+        StateHasChanged();
+    }
+
+    string GetPlanLabel(SubscriptionPlan plan) => plan switch
+    {
+        SubscriptionPlan.Pro   => "⭐ Pro",
+        SubscriptionPlan.Admin => "🛡 Admin",
+        _                      => "🆓 Free"
+    };
+}
+
+<style>
+    .page-title { color: #7c6af7; margin-bottom: 24px; font-size: 1.5rem; }
+    .loading { color: #a0a0b8; padding: 40px; text-align: center; }
+
+    .filter-bar { display: flex; gap: 8px; margin-bottom: 16px; }
+    .filter-btn {
+        padding: 6px 16px; border-radius: 20px; border: 1px solid #2d2d44;
+        background: #1a1a2e; color: #a0a0b8; cursor: pointer; font-size: 0.85rem;
+        transition: all 0.2s;
+    }
+    .filter-btn.active, .filter-btn:hover { background: #7c6af7; color: #fff; border-color: #7c6af7; }
+
+    .panel { background: #1a1a2e; border-radius: 12px; padding: 20px; border: 1px solid #2d2d44; }
+
+    .data-table { width: 100%; border-collapse: collapse; }
+    .data-table th { color: #7c6af7; font-size: 0.8rem; padding: 10px 8px; text-align: left; border-bottom: 1px solid #2d2d44; }
+    .data-table td { padding: 10px 8px; border-bottom: 1px solid #1f1f35; font-size: 0.85rem; vertical-align: middle; }
+
+    .tid { color: #7c6af7; font-size: 0.8rem; }
+    .expiry { color: #a0a0b8; font-size: 0.8rem; }
+
+    .plan-badge { padding: 3px 10px; border-radius: 12px; font-size: 0.78rem; font-weight: 600; }
+    .plan-badge.free  { background: #1e2d44; color: #4f9cf9; }
+    .plan-badge.pro   { background: #2d2010; color: #f9a84f; }
+    .plan-badge.admin { background: #22173a; color: #7c6af7; }
+
+    .plan-select {
+        background: #2d2d44; color: #e0e0e0; border: 1px solid #3d3d5a;
+        border-radius: 6px; padding: 4px 8px; font-size: 0.82rem; cursor: pointer;
+    }
+    .plan-select:hover { border-color: #7c6af7; }
+
+    .toast {
+        position: fixed; bottom: 24px; right: 24px;
+        padding: 12px 20px; border-radius: 8px; font-size: 0.9rem;
+        animation: fadeIn 0.3s ease;
+    }
+    .toast.success { background: #1a3a2a; color: #4fcf8f; border: 1px solid #4fcf8f; }
+    .toast.error   { background: #3a1a1a; color: #f95f5f; border: 1px solid #f95f5f; }
+
+    @@keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+</style>

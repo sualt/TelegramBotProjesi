@@ -1,9 +1,11 @@
+using TelegramBot.Core.Models;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
 using TelegramBot.BotService.Sessions;
 using TelegramBot.Infrastructure.Services;
+using TelegramUser = Telegram.Bot.Types.User;
 
 namespace TelegramBot.BotService.Handlers;
 
@@ -28,6 +30,7 @@ public class MessageHandler
 
     public async Task HandleAsync(Message message, CancellationToken ct)
     {
+        Console.WriteLine($"MESAJ GELDİ => {message.Text}");
         if (message.From == null || message.Text == null) return;
 
         var from = message.From;
@@ -41,6 +44,7 @@ public class MessageHandler
         {
             await _bot.SendMessage(chatId,
                 "🚫 Hesabın engellenmiştir. @admin ile iletişime geçin.",
+                replyMarkup: GetMainMenuKeyboard(),   // ✅ Engellide bile klavye kalsın
                 cancellationToken: ct);
             await _userService.LogInteractionAsync(telegramId.ToString(), "blocked_attempt");
             return;
@@ -59,38 +63,65 @@ public class MessageHandler
             }
             else
             {
-                await _bot.SendMessage(chatId, "❌ Geçerli bir sayı gir (örn: 100)", cancellationToken: ct);
+                // ✅ DÜZELTME 1: Hatalı tutar mesajına da klavye eklendi
+                await _bot.SendMessage(chatId,
+                    "❌ Geçerli bir sayı gir (örn: 100)",
+                    replyMarkup: GetMainMenuKeyboard(),
+                    cancellationToken: ct);
             }
             return;
         }
 
         switch (text)
         {
+            case "/menu":
+                Console.WriteLine("SWITCH MENU");
+                await HandleMenuAsync(chatId, telegramId, ct);
+                break;
+
             case "/start":
                 await HandleStartAsync(chatId, from, ct);
                 break;
+
             case "/help":
             case "❓ Yardım":
                 await HandleHelpAsync(chatId, telegramId, ct);
                 break;
-            case "/menu":
-                await HandleMenuAsync(chatId, telegramId, ct);
-                break;
+
             case "/convert":
             case "💱 Döviz Çevir":
                 await HandleConvertAsync(chatId, telegramId, ct);
                 break;
+
             case "/dashboard":
             case "📊 Dashboard'um":
                 await HandleDashboardAsync(chatId, telegramId, ct);
                 break;
+
             case "📈 Popüler Kurlar":
                 await HandlePopularRatesAsync(chatId, telegramId, ct);
+                break;
+
+            case "/upgrade":
+                await HandleUpgradeAsync(chatId, telegramId, ct);
+                break;
+
+            case "/plan":
+            case "💳 Üyeliğim":
+                await HandlePlanInfoAsync(chatId, telegramId, ct);
+                break;
+
+            // ✅ DÜZELTME 2: Bilinmeyen komut/metin → menüyü göster
+            default:
+                await _bot.SendMessage(chatId,
+                    "❓ Anlamadım. Lütfen aşağıdaki menüyü kullan:",
+                    replyMarkup: GetMainMenuKeyboard(),
+                    cancellationToken: ct);
                 break;
         }
     }
 
-    private async Task HandleStartAsync(long chatId, User from, CancellationToken ct)
+    private async Task HandleStartAsync(long chatId, TelegramUser from, CancellationToken ct)
     {
         await _userService.LogInteractionAsync(from.Id.ToString(), "start");
 
@@ -132,23 +163,55 @@ public class MessageHandler
 
         await _bot.SendMessage(chatId, text,
             parseMode: ParseMode.Markdown,
+            // ✅ Help sonrası da klavye göster
+            replyMarkup: GetMainMenuKeyboard(),
             cancellationToken: ct);
     }
 
     private async Task HandleMenuAsync(long chatId, long telegramId, CancellationToken ct)
     {
+        Console.WriteLine("MENU 1");
+
         await _userService.LogInteractionAsync(telegramId.ToString(), "menu_open");
-        await _bot.SendMessage(chatId, "📋 Ana Menü:",
+
+        Console.WriteLine("MENU 2");
+
+        var user = await _userService.GetOrCreateUserAsync(telegramId, null, null, null);
+
+        Console.WriteLine("MENU 3");
+
+        var planEmoji = user.Plan switch
+        {
+            SubscriptionPlan.Pro => "⭐ Pro",
+            SubscriptionPlan.Admin => "🛡 Admin",
+            _ => "🆓 Free"
+        };
+
+        Console.WriteLine("MENU 4");
+
+        await _bot.SendMessage(
+            chatId,
+            $"📋 *Ana Menü* — {planEmoji}\n\nBir seçenek seç:",
+            parseMode: ParseMode.Markdown,
             replyMarkup: GetMainMenuKeyboard(),
             cancellationToken: ct);
+
+        Console.WriteLine("MENU 5");
     }
 
     private async Task HandleConvertAsync(long chatId, long telegramId, CancellationToken ct)
     {
+        Console.WriteLine("HandleConvertAsync CALISTI");
         await _userService.LogInteractionAsync(telegramId.ToString(), "convert_start");
+        Console.WriteLine("Mesaj gonderiliyor...");
         _sessions.SetSession(telegramId, new UserSession { Step = "from" });
 
+        // ✅ Convert başlarken reply keyboard'u gizle (inline keyboard gelecek)
         await _bot.SendMessage(chatId, "💱 Kaynak para birimini seç:",
+            replyMarkup: new ReplyKeyboardRemove(),
+            cancellationToken: ct);
+
+        await _bot.SendMessage(chatId, "Para birimini seç:",
             replyMarkup: GetCurrencyInlineKeyboard("from"),
             cancellationToken: ct);
     }
@@ -206,6 +269,7 @@ public class MessageHandler
 
         await _bot.SendMessage(chatId, text,
             parseMode: ParseMode.Markdown,
+            replyMarkup: GetMainMenuKeyboard(),   // ✅ Dashboard sonrası klavye geri gelsin
             cancellationToken: ct);
     }
 
@@ -230,6 +294,7 @@ public class MessageHandler
         text += "\n_5 dakikada bir güncellenir_";
         await _bot.SendMessage(chatId, text,
             parseMode: ParseMode.Markdown,
+            replyMarkup: GetMainMenuKeyboard(),   // ✅ Klavye geri gelsin
             cancellationToken: ct);
     }
 
@@ -247,6 +312,7 @@ public class MessageHandler
             {
                 await _bot.SendMessage(chatId,
                     "⛔ Günlük 10 sorgu hakkını tükettiniz!\n🌙 Gece yarısı sıfırlanacak.",
+                    replyMarkup: GetMainMenuKeyboard(),   // ✅ Limit dolunca da klavye göster
                     cancellationToken: ct);
                 return;
             }
@@ -263,6 +329,8 @@ public class MessageHandler
                        $"📊 Kur: 1 {from} = {rate:F4} {to}\n" +
                        $"{hakBilgisi}";
 
+            // ✅ DÜZELTME 3: Sonuç mesajında hem inline butonlar hem reply klavye
+            // Önce inline butonlu sonuç mesajı
             await _bot.SendMessage(chatId, text,
                 parseMode: ParseMode.Markdown,
                 replyMarkup: new InlineKeyboardMarkup(new[]
@@ -274,33 +342,103 @@ public class MessageHandler
                     }
                 }),
                 cancellationToken: ct);
+
+            // ✅ Sonra ayrı mesajla reply klavyeyi geri getir
+            await _bot.SendMessage(chatId,
+                "Ana menüye dönmek için seçim yap:",
+                replyMarkup: GetMainMenuKeyboard(),
+                cancellationToken: ct);
         }
         catch (Exception ex)
         {
-            await _bot.SendMessage(chatId, $"❌ Hata: {ex.Message}", cancellationToken: ct);
+            await _bot.SendMessage(chatId,
+                $"❌ Hata: {ex.Message}",
+                replyMarkup: GetMainMenuKeyboard(),   // ✅ Hata sonrası da klavye
+                cancellationToken: ct);
         }
     }
 
     public static ReplyKeyboardMarkup GetMainMenuKeyboard()
     {
-        var buttons = new List<List<KeyboardButton>>
+        return new ReplyKeyboardMarkup(new[]
         {
-            new() { new KeyboardButton("💱 Döviz Çevir"), new KeyboardButton("📊 Dashboard'um") },
-            new() { new KeyboardButton("📈 Popüler Kurlar"), new KeyboardButton("❓ Yardım") }
+            new KeyboardButton[]
+            {
+                "💱 Döviz Çevir",
+                "📊 Dashboard'um"
+            },
+            new KeyboardButton[]
+            {
+                "📈 Popüler Kurlar",
+                "❓ Yardım"
+            },
+            new KeyboardButton[]
+            {
+                "💳 Üyeliğim"
+            }
+        })
+        {
+            ResizeKeyboard = true,
         };
-        return new ReplyKeyboardMarkup(buttons) { ResizeKeyboard = true };
     }
 
-    public static InlineKeyboardMarkup GetCurrencyInlineKeyboard(string type, string? exclude = null)
+    public static InlineKeyboardMarkup GetCurrencyInlineKeyboard(
+        string type,
+        string? exclude = null)
     {
         var currencies = ExchangeService.SupportedCurrencies
-            .Where(c => c != exclude).ToList();
+            .Where(c => c != exclude)
+            .ToList();
 
-        var rows = currencies.Chunk(3)
-            .Select(row => row.Select(c =>
-                InlineKeyboardButton.WithCallbackData(c, $"{type}_{c}")).ToArray())
+        var rows = currencies
+            .Chunk(3)
+            .Select(row =>
+                row.Select(c =>
+                    InlineKeyboardButton.WithCallbackData(
+                        c,
+                        $"{type}_{c}"
+                    )
+                ).ToArray()
+            )
             .ToArray();
 
         return new InlineKeyboardMarkup(rows);
+    }
+
+    private async Task HandlePlanInfoAsync(long chatId, long telegramId, CancellationToken ct)
+    {
+        var user = await _userService.GetOrCreateUserAsync(telegramId, null, null, null);
+        var planName = user.Plan.ToString();
+        var expiry = user.PlanExpiresAt.HasValue
+            ? user.PlanExpiresAt.Value.ToString("dd.MM.yyyy")
+            : "Süresiz";
+        var limit = user.Plan == SubscriptionPlan.Pro ? 50 : user.Plan == SubscriptionPlan.Admin ? 9999 : 10;
+
+        var text = $"💳 *Üyelik Bilgisi*\n\n" +
+                   $"Plan: *{planName}*\n" +
+                   $"Günlük limit: *{limit} sorgu*\n" +
+                   $"Geçerlilik: *{expiry}*\n\n" +
+                   (user.Plan == SubscriptionPlan.Free
+                       ? "⬆️ Pro'ya geçmek için /upgrade"
+                       : "✅ Aktif üyeliğin var!");
+
+        await _bot.SendMessage(chatId, text,
+            parseMode: ParseMode.Markdown,
+            replyMarkup: GetMainMenuKeyboard(),   // ✅ Plan sonrası klavye
+            cancellationToken: ct);
+    }
+
+    private async Task HandleUpgradeAsync(long chatId, long telegramId, CancellationToken ct)
+    {
+        var text = "⭐ *Pro Üyelik*\n\n" +
+                   "• Günlük 50 sorgu hakkı\n" +
+                   "• Öncelikli destek\n" +
+                   "• Daha fazla para birimi\n\n" +
+                   "Üyelik için @admin ile iletişime geçin.";
+
+        await _bot.SendMessage(chatId, text,
+            parseMode: ParseMode.Markdown,
+            replyMarkup: GetMainMenuKeyboard(),   // ✅ Upgrade sonrası klavye
+            cancellationToken: ct);
     }
 }

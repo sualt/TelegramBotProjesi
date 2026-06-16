@@ -57,45 +57,50 @@ public class UserService
     }
 
     // ✅ DEĞİŞTİ: fromCache parametresi eklendi
-    public async Task<(bool Allowed, int Remaining, int Used)> CheckAndUseLimitAsync(
-        long telegramId, bool fromCache = false)
+   public async Task<(bool Allowed, int Remaining, int Used)> CheckAndUseLimitAsync(
+    long telegramId, bool fromCache = false)
+{
+    // Cache'den geldiyse hak yeme
+    if (fromCache)
+        return (true, -1, -1);
+
+    var today = DateTime.UtcNow.ToString("yyyy-MM-dd");
+    var id = telegramId.ToString();
+
+    // Kullanıcının günlük limitini al
+    var userFilter = Builders<User>.Filter.Eq(u => u.TelegramId, id);
+    var user = await _context.Users.Find(userFilter).FirstOrDefaultAsync();
+
+    var limit = user?.DailyLimit ?? 10;
+
+    var filter = Builders<DailyUsage>.Filter.And(
+        Builders<DailyUsage>.Filter.Eq(d => d.TelegramId, id),
+        Builders<DailyUsage>.Filter.Eq(d => d.UsageDate, today)
+    );
+
+    var usage = await _context.DailyUsages.Find(filter).FirstOrDefaultAsync();
+    var currentCount = usage?.Count ?? 0;
+
+    if (currentCount >= limit)
+        return (false, 0, currentCount);
+
+    if (usage == null)
     {
-        // Cache'den geldiyse hak yeme
-        if (fromCache)
-            return (true, -1, -1);
-
-        var today = DateTime.UtcNow.ToString("yyyy-MM-dd");
-        var id = telegramId.ToString();
-        const int limit = 10;
-
-        var filter = Builders<DailyUsage>.Filter.And(
-            Builders<DailyUsage>.Filter.Eq(d => d.TelegramId, id),
-            Builders<DailyUsage>.Filter.Eq(d => d.UsageDate, today)
-        );
-
-        var usage = await _context.DailyUsages.Find(filter).FirstOrDefaultAsync();
-        var currentCount = usage?.Count ?? 0;
-
-        if (currentCount >= limit)
-            return (false, 0, currentCount);
-
-        if (usage == null)
+        await _context.DailyUsages.InsertOneAsync(new DailyUsage
         {
-            await _context.DailyUsages.InsertOneAsync(new DailyUsage
-            {
-                TelegramId = id,
-                UsageDate = today,
-                Count = 1
-            });
-        }
-        else
-        {
-            var update = Builders<DailyUsage>.Update.Inc(d => d.Count, 1);
-            await _context.DailyUsages.UpdateOneAsync(filter, update);
-        }
-
-        return (true, limit - currentCount - 1, currentCount + 1);
+            TelegramId = id,
+            UsageDate = today,
+            Count = 1
+        });
     }
+    else
+    {
+        var update = Builders<DailyUsage>.Update.Inc(d => d.Count, 1);
+        await _context.DailyUsages.UpdateOneAsync(filter, update);
+    }
+
+    return (true, limit - currentCount - 1, currentCount + 1);
+}
 
     public async Task SaveQueryAsync(string telegramId, string from, string to,
         decimal amount, decimal rate, decimal result, bool fromCache)
@@ -204,4 +209,60 @@ public class UserService
 
         return result;
     }
+
+    // --- Üyelik ---
+public async Task<bool> SetPlanAsync(string telegramId, SubscriptionPlan plan, int daysValid = 30)
+{
+    var filter = Builders<User>.Filter.Eq(u => u.TelegramId, telegramId);
+    var update = Builders<User>.Update
+        .Set(u => u.Plan, plan)
+        .Set(u => u.PlanExpiresAt, plan == SubscriptionPlan.Free ? null : (DateTime?)DateTime.UtcNow.AddDays(daysValid))
+        .Set(u => u.DailyLimit, plan switch
+        {
+            SubscriptionPlan.Pro   => 50,
+            SubscriptionPlan.Admin => 9999,
+            _                      => 10
+        });
+    var result = await _context.Users.UpdateOneAsync(filter, update);
+    return result.ModifiedCount > 0;
+}
+
+public async Task<SubscriptionPlan> GetPlanAsync(string telegramId)
+{
+    var filter = Builders<User>.Filter.Eq(u => u.TelegramId, telegramId);
+    var user = await _context.Users.Find(filter).FirstOrDefaultAsync();
+    return user?.Plan ?? SubscriptionPlan.Free;
+}
+
+// --- Tıklama istatistikleri ---
+public async Task<Dictionary<string, int>> GetActionStatsAsync(string telegramId)
+{
+    var filter = Builders<InteractionLog>.Filter.Eq(l => l.TelegramId, telegramId);
+    var logs = await _context.InteractionLogs.Find(filter).ToListAsync();
+
+    return logs
+        .GroupBy(l => l.Action)
+        .ToDictionary(g => g.Key, g => g.Count());
+}
+
+public async Task<int> GetTotalClicksAsync(string telegramId)
+{
+    var filter = Builders<InteractionLog>.Filter.And(
+        Builders<InteractionLog>.Filter.Eq(l => l.TelegramId, telegramId),
+        Builders<InteractionLog>.Filter.Eq(l => l.Action, "button_click")
+    );
+    return (int)await _context.InteractionLogs.CountDocumentsAsync(filter);
+}
+
+public async Task<long> GetTotalUsersAsync()
+{
+    return await _context.Users.CountDocumentsAsync(Builders<User>.Filter.Empty);
+}
+
+public async Task<long> GetActiveUsersAsync()
+{
+    var since = DateTime.UtcNow.AddDays(-7);
+    var filter = Builders<User>.Filter.Gt(u => u.LastActive, since);
+    return await _context.Users.CountDocumentsAsync(filter);
+}
 }

@@ -17,12 +17,20 @@
 }
 else
 {
+    <!-- Üst istatistik kartları -->
     <div class="stats-grid">
         <div class="stat-card blue">
             <div class="stat-icon">👥</div>
             <div class="stat-info">
                 <div class="stat-value">@totalUsers</div>
                 <div class="stat-label">Toplam Kullanıcı</div>
+            </div>
+        </div>
+        <div class="stat-card green">
+            <div class="stat-icon">🟢</div>
+            <div class="stat-info">
+                <div class="stat-value">@activeUsers</div>
+                <div class="stat-label">Aktif (7 gün)</div>
             </div>
         </div>
         <div class="stat-card red">
@@ -32,6 +40,13 @@ else
                 <div class="stat-label">Engelli Kullanıcı</div>
             </div>
         </div>
+        <div class="stat-card purple">
+            <div class="stat-icon">⭐</div>
+            <div class="stat-info">
+                <div class="stat-value">@proUsers</div>
+                <div class="stat-label">Pro Üye</div>
+            </div>
+        </div>
         <div class="stat-card green">
             <div class="stat-icon">💱</div>
             <div class="stat-info">
@@ -39,16 +54,31 @@ else
                 <div class="stat-label">Toplam Sorgu</div>
             </div>
         </div>
-        <div class="stat-card purple">
+        <div class="stat-card blue">
             <div class="stat-icon">📅</div>
             <div class="stat-info">
                 <div class="stat-value">@todayQueries</div>
                 <div class="stat-label">Bugünkü Sorgu</div>
             </div>
         </div>
+        <div class="stat-card orange">
+            <div class="stat-icon">👆</div>
+            <div class="stat-info">
+                <div class="stat-value">@totalClicks</div>
+                <div class="stat-label">Toplam Tıklama</div>
+            </div>
+        </div>
+        <div class="stat-card purple">
+            <div class="stat-icon">📋</div>
+            <div class="stat-info">
+                <div class="stat-value">@totalInteractions</div>
+                <div class="stat-label">Toplam Etkileşim</div>
+            </div>
+        </div>
     </div>
 
     <div class="panels">
+        <!-- Popüler Pariteler -->
         <div class="panel">
             <h3>⭐ Popüler Pariteler</h3>
             <table class="data-table">
@@ -67,6 +97,59 @@ else
             </table>
         </div>
 
+        <!-- Tıklama İstatistikleri -->
+        <div class="panel">
+            <h3>👆 Komut Kullanımı</h3>
+            <table class="data-table">
+                <thead>
+                    <tr><th>Komut / Aksiyon</th><th>Sayı</th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var (action, count) in actionStats.OrderByDescending(x => x.Value).Take(8))
+                    {
+                        <tr>
+                            <td>@GetActionEmoji(action) @action</td>
+                            <td>
+                                <div class="bar-wrap">
+                                    <div class="bar" style="width: @(GetBarWidth(count))%"></div>
+                                    <span class="bar-label">@count</span>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Üyelik Dağılımı -->
+        <div class="panel">
+            <h3>💳 Üyelik Dağılımı</h3>
+            <div class="plan-bars">
+                <div class="plan-row">
+                    <span class="plan-label">🆓 Free</span>
+                    <div class="plan-bar-wrap">
+                        <div class="plan-bar free" style="width: @(GetPlanWidth(freeUsers))%"></div>
+                    </div>
+                    <span class="plan-count">@freeUsers</span>
+                </div>
+                <div class="plan-row">
+                    <span class="plan-label">⭐ Pro</span>
+                    <div class="plan-bar-wrap">
+                        <div class="plan-bar pro" style="width: @(GetPlanWidth(proUsers))%"></div>
+                    </div>
+                    <span class="plan-count">@proUsers</span>
+                </div>
+                <div class="plan-row">
+                    <span class="plan-label">🛡 Admin</span>
+                    <div class="plan-bar-wrap">
+                        <div class="plan-bar admin" style="width: @(GetPlanWidth(adminUsers))%"></div>
+                    </div>
+                    <span class="plan-count">@adminUsers</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Son Aktiviteler -->
         <div class="panel">
             <h3>🕐 Son Aktiviteler</h3>
             <div class="activity-list">
@@ -86,26 +169,49 @@ else
 @code {
     bool loading = true;
     long totalUsers, blockedUsers, totalQueries, todayQueries;
+    long activeUsers, proUsers, freeUsers, adminUsers;
+    long totalClicks, totalInteractions;
     List<(string Pair, int Count)> popularPairs = new();
     List<InteractionLog> recentLogs = new();
+    Dictionary<string, int> actionStats = new();
 
     protected override async Task OnInitializedAsync()
     {
         var today = DateTime.UtcNow.Date;
 
-        var userFilter = MongoDB.Driver.Builders<User>.Filter.Empty;
-        var blockedFilter = MongoDB.Driver.Builders<User>.Filter.Eq(u => u.IsBlocked, true);
-        var queryFilter = MongoDB.Driver.Builders<QueryRecord>.Filter.Empty;
-        var todayFilter = MongoDB.Driver.Builders<QueryRecord>.Filter.Gte(q => q.QueriedAt, today);
-        var logFilter = MongoDB.Driver.Builders<InteractionLog>.Filter.Empty;
+        // Kullanıcı sayıları
+        totalUsers   = await DbContext.Users.CountDocumentsAsync(Builders<User>.Filter.Empty);
+        blockedUsers = await DbContext.Users.CountDocumentsAsync(Builders<User>.Filter.Eq(u => u.IsBlocked, true));
+        activeUsers  = await DbContext.Users.CountDocumentsAsync(
+            Builders<User>.Filter.Gt(u => u.LastActive, DateTime.UtcNow.AddDays(-7)));
 
-        totalUsers = await DbContext.Users.CountDocumentsAsync(userFilter);
-        blockedUsers = await DbContext.Users.CountDocumentsAsync(blockedFilter);
-        totalQueries = await DbContext.Queries.CountDocumentsAsync(queryFilter);
-        todayQueries = await DbContext.Queries.CountDocumentsAsync(todayFilter);
+        // Üyelik dağılımı
+        freeUsers  = await DbContext.Users.CountDocumentsAsync(Builders<User>.Filter.Eq(u => u.Plan, SubscriptionPlan.Free));
+        proUsers   = await DbContext.Users.CountDocumentsAsync(Builders<User>.Filter.Eq(u => u.Plan, SubscriptionPlan.Pro));
+        adminUsers = await DbContext.Users.CountDocumentsAsync(Builders<User>.Filter.Eq(u => u.Plan, SubscriptionPlan.Admin));
 
+        // Sorgu sayıları
+        totalQueries = await DbContext.Queries.CountDocumentsAsync(Builders<QueryRecord>.Filter.Empty);
+        todayQueries = await DbContext.Queries.CountDocumentsAsync(
+            Builders<QueryRecord>.Filter.Gte(q => q.QueriedAt, today));
+
+        // Tıklama ve etkileşim sayıları
+        totalInteractions = await DbContext.InteractionLogs.CountDocumentsAsync(Builders<InteractionLog>.Filter.Empty);
+        totalClicks = await DbContext.InteractionLogs.CountDocumentsAsync(
+            Builders<InteractionLog>.Filter.Eq(l => l.Action, "button_click"));
+
+        // Komut kullanım istatistikleri
+        var allLogs = await DbContext.InteractionLogs
+            .Find(Builders<InteractionLog>.Filter.Empty)
+            .ToListAsync();
+
+        actionStats = allLogs
+            .GroupBy(l => l.Action)
+            .ToDictionary(g => g.Key, g => g.Count());
+
+        // Popüler pariteler
         var allQueries = await DbContext.Queries
-            .Find(queryFilter)
+            .Find(Builders<QueryRecord>.Filter.Empty)
             .ToListAsync();
 
         popularPairs = allQueries
@@ -115,27 +221,39 @@ else
             .Take(5)
             .ToList();
 
+        // Son aktiviteler
         recentLogs = await DbContext.InteractionLogs
-            .Find(logFilter)
+            .Find(Builders<InteractionLog>.Filter.Empty)
+            .SortByDescending(l => l.CreatedAt)
+            .Limit(10)
             .ToListAsync();
-
-        recentLogs = recentLogs
-            .OrderByDescending(l => l.CreatedAt)
-            .Take(10)
-            .ToList();
 
         loading = false;
     }
 
+    int GetBarWidth(int count)
+    {
+        var max = actionStats.Values.DefaultIfEmpty(1).Max();
+        return max == 0 ? 0 : (int)((double)count / max * 100);
+    }
+
+    int GetPlanWidth(long count)
+    {
+        return totalUsers == 0 ? 0 : (int)((double)count / totalUsers * 100);
+    }
+
     string GetActionEmoji(string action) => action switch
     {
-        "start" => "🚀",
-        "help" => "❓",
-        "convert_start" => "💱",
+        "start"          => "🚀",
+        "help"           => "❓",
+        "menu_open"      => "📋",
+        "convert_start"  => "💱",
         "currency_query" => "✅",
-        "blocked_attempt" => "🚫",
+        "blocked_attempt"=> "🚫",
         "dashboard_view" => "📊",
-        _ => "•"
+        "button_click"   => "👆",
+        "popular_rates"  => "📈",
+        _                => "•"
     };
 }
 
@@ -160,12 +278,13 @@ else
         border: 1px solid #2d2d44;
     }
 
-    .stat-card.blue  { border-top: 3px solid #4f9cf9; }
-    .stat-card.red   { border-top: 3px solid #f95f5f; }
-    .stat-card.green { border-top: 3px solid #4fcf8f; }
-    .stat-card.purple{ border-top: 3px solid #7c6af7; }
+    .stat-card.blue   { border-top: 3px solid #4f9cf9; }
+    .stat-card.red    { border-top: 3px solid #f95f5f; }
+    .stat-card.green  { border-top: 3px solid #4fcf8f; }
+    .stat-card.purple { border-top: 3px solid #7c6af7; }
+    .stat-card.orange { border-top: 3px solid #f9a84f; }
 
-    .stat-icon { font-size: 2rem; }
+    .stat-icon  { font-size: 2rem; }
     .stat-value { font-size: 1.8rem; font-weight: 700; color: #fff; }
     .stat-label { font-size: 0.8rem; color: #a0a0b8; margin-top: 4px; }
 
@@ -182,10 +301,27 @@ else
 
     .data-table { width: 100%; border-collapse: collapse; }
     .data-table th { color: #7c6af7; font-size: 0.8rem; padding: 8px 0; text-align: left; border-bottom: 1px solid #2d2d44; }
-    .data-table td { padding: 10px 0; border-bottom: 1px solid #1f1f35; font-size: 0.9rem; }
+    .data-table td { padding: 8px 0; border-bottom: 1px solid #1f1f35; font-size: 0.85rem; vertical-align: middle; }
 
     .badge { background: #2d2d44; color: #7c6af7; padding: 2px 8px; border-radius: 12px; font-size: 0.8rem; }
 
+    /* Komut kullanım barları */
+    .bar-wrap  { display: flex; align-items: center; gap: 8px; }
+    .bar       { height: 6px; background: #7c6af7; border-radius: 3px; min-width: 2px; transition: width 0.3s; }
+    .bar-label { font-size: 0.8rem; color: #a0a0b8; min-width: 28px; }
+
+    /* Üyelik dağılım barları */
+    .plan-bars  { display: flex; flex-direction: column; gap: 14px; margin-top: 8px; }
+    .plan-row   { display: flex; align-items: center; gap: 10px; }
+    .plan-label { font-size: 0.85rem; color: #e0e0e0; min-width: 70px; }
+    .plan-bar-wrap { flex: 1; background: #2d2d44; border-radius: 4px; height: 8px; }
+    .plan-bar   { height: 8px; border-radius: 4px; transition: width 0.3s; }
+    .plan-bar.free  { background: #4f9cf9; }
+    .plan-bar.pro   { background: #f9a84f; }
+    .plan-bar.admin { background: #7c6af7; }
+    .plan-count { font-size: 0.85rem; color: #a0a0b8; min-width: 28px; text-align: right; }
+
+    /* Son aktiviteler */
     .activity-item {
         display: flex;
         justify-content: space-between;
@@ -193,7 +329,7 @@ else
         border-bottom: 1px solid #1f1f35;
         font-size: 0.85rem;
     }
-    .activity-action { color: #e0e0e0; }
-    .activity-id { color: #7c6af7; }
-    .activity-time { color: #606080; }
+    .activity-action { color: #e0e0e0; flex: 1; }
+    .activity-id     { color: #7c6af7; flex: 1; text-align: center; }
+    .activity-time   { color: #606080; }
 </style>

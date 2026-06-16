@@ -37,6 +37,8 @@ public class BotHostedService : BackgroundService
     new BotCommand { Command = "menu",      Description = "Ana menü" },
     new BotCommand { Command = "convert",   Description = "Döviz çevir" },
     new BotCommand { Command = "dashboard", Description = "İstatistiklerim" },
+    new BotCommand { Command = "plan",    Description = "Üyelik bilgisi" },
+new BotCommand { Command = "upgrade", Description = "Pro'ya geçiş" },
     new BotCommand { Command = "help",      Description = "Yardım" }
 }, cancellationToken: stoppingToken);
 
@@ -57,20 +59,27 @@ public class BotHostedService : BackgroundService
     }
 
     private async Task HandleUpdateAsync(ITelegramBotClient bot, Update update, CancellationToken ct)
+{
+    try
     {
-        try
+        if (update.Message != null)
         {
-            if (update.Message != null)
-                await _messageHandler.HandleAsync(update.Message, ct);
+            if (!string.IsNullOrEmpty(update.Message.Text))
+                update.Message.Text = update.Message.Text.Split('@')[0];
 
-            if (update.CallbackQuery != null)
-                await _callbackHandler.HandleAsync(update.CallbackQuery, ct);
+            await _messageHandler.HandleAsync(update.Message, ct);
         }
-        catch (Exception ex)
+
+        if (update.CallbackQuery != null)
         {
-            _logger.LogError(ex, "Update işlenirken hata");
+            await _callbackHandler.HandleAsync(update.CallbackQuery, ct);
         }
     }
+    catch (Exception ex)
+    {
+        _logger.LogError(ex, "Update işlenirken hata");
+    }
+}
 
     private Task HandleErrorAsync(ITelegramBotClient bot, Exception ex, CancellationToken ct)
     {
